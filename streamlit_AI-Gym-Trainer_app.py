@@ -1,8 +1,8 @@
 import streamlit as st
 import cv2
 import mediapipe as mp
-import numpy as np
 import math
+import tempfile
 from PIL import Image
 
 st.set_page_config(page_title="Full Body AI Gym Trainer", layout="wide")
@@ -72,25 +72,29 @@ class FormChecker:
 # ==========================
 # App UI
 # ==========================
+
 st.title("🏋️‍♂️ Full Body AI Gym Trainer")
-st.write("Real-time exercise tracking with rep counting and form feedback.")
+st.write("Upload a video to track exercises, count reps, and get form feedback.")
 
 exercise = st.selectbox("Select Exercise", ["Squat", "Push-Up", "Lunge"])
+uploaded_file = st.file_uploader("Upload Exercise Video", type=["mp4", "mov", "avi"])
 
 # Initialize modules
 pose = PoseEstimator()
 counter = RepCounter()
 form = FormChecker()
 
-run_app = st.button("Start Trainer")
-
-if run_app:
+if uploaded_file is not None:
+    # Save video to a temporary file
+    tfile = tempfile.NamedTemporaryFile(delete=False)
+    tfile.write(uploaded_file.read())
+    
+    cap = cv2.VideoCapture(tfile.name)
     stframe = st.empty()
-    cap = cv2.VideoCapture(0)
-    while True:
+    
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            st.warning("Cannot access webcam.")
             break
         frame = cv2.flip(frame, 1)
         landmarks = pose.estimate(frame)
@@ -103,6 +107,6 @@ if run_app:
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(frame, f"Form: {feedback}", (10, 110),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 255), 2)
-        # Convert to RGB and display in Streamlit
+        # Convert to RGB and display
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         stframe.image(frame_rgb, channels="RGB", use_column_width=True)
