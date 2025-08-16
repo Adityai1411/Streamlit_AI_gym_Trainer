@@ -1,9 +1,9 @@
 import streamlit as st
-import cv2
 import mediapipe as mp
 import math
+from PIL import Image, ImageDraw
 import tempfile
-from PIL import Image
+import imageio
 
 st.set_page_config(page_title="Full Body AI Gym Trainer", layout="wide")
 
@@ -18,8 +18,9 @@ class PoseEstimator:
                                       min_tracking_confidence=0.5)
 
     def estimate(self, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(rgb)
+        # Convert PIL Image to RGB array
+        frame_rgb = frame.convert("RGB")
+        results = self.pose.process(frame_rgb)
         return results.pose_landmarks
 
 class RepCounter:
@@ -77,7 +78,7 @@ st.title("🏋️‍♂️ Full Body AI Gym Trainer")
 st.write("Upload a video to track exercises, count reps, and get form feedback.")
 
 exercise = st.selectbox("Select Exercise", ["Squat", "Push-Up", "Lunge"])
-uploaded_file = st.file_uploader("Upload Exercise Video", type=["mp4", "mov", "avi"])
+uploaded_file = st.file_uploader("Upload Exercise Video", type=["mp4", "mov", "avi", "gif"])
 
 # Initialize modules
 pose = PoseEstimator()
@@ -85,28 +86,26 @@ counter = RepCounter()
 form = FormChecker()
 
 if uploaded_file is not None:
-    # Save video to a temporary file
+    # Save uploaded video temporarily
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.read())
-    
-    cap = cv2.VideoCapture(tfile.name)
+
+    # Read video frames using imageio
+    reader = imageio.get_reader(tfile.name)
     stframe = st.empty()
     
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = cv2.flip(frame, 1)
-        landmarks = pose.estimate(frame)
+    for frame in reader:
+        # Convert numpy array to PIL Image
+        pil_frame = Image.fromarray(frame)
+        
+        landmarks = pose.estimate(pil_frame)
         reps = counter.update(landmarks)
         feedback = form.check(landmarks)
-        # Overlay info
-        cv2.putText(frame, f"Exercise: {exercise}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-        cv2.putText(frame, f"Reps: {reps}", (10, 70),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(frame, f"Form: {feedback}", (10, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 255), 2)
-        # Convert to RGB and display
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        stframe.image(frame_rgb, channels="RGB", use_column_width=True)
+        
+        # Draw overlay using PIL
+        draw = ImageDraw.Draw(pil_frame)
+        draw.text((10, 10), f"Exercise: {exercise}", fill=(255,255,0))
+        draw.text((10, 40), f"Reps: {reps}", fill=(0,255,0))
+        draw.text((10, 70), f"Form: {feedback}", fill=(0,200,255))
+        
+        stframe.image(pil_frame, use_column_width=True)
