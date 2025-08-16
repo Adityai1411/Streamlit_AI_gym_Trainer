@@ -1,0 +1,6 @@
+streamlit
+mediapipe
+numpy
+Pillow
+imageio
+math
